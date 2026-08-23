@@ -1604,47 +1604,28 @@ export default function App() {
               const count = items.filter((i) => i.category === cat.id).length;
               const isSelected = selectedCategory === cat.id;
               return (
-                // A row, not a button: the delete control cannot nest inside one.
-                <div
+                <button
                   key={cat.id}
-                  className={`w-full flex items-center rounded-xl text-sm transition-all ${
+                  onClick={() => {
+                    const nextCat = isSelected ? 'all' : cat.id;
+                    setSelectedCategory(nextCat);
+                    if (nextCat !== 'all') {
+                      setOnlyFavorites(false);
+                      setSelectedType('all');
+                      setSelectedTag(null);
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all cursor-pointer ${
                     isSelected
                       ? 'bg-slate-800 text-white font-medium border border-slate-700 shadow-sm'
                       : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                   }`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextCat = isSelected ? 'all' : cat.id;
-                      setSelectedCategory(nextCat);
-                      if (nextCat !== 'all') {
-                        setOnlyFavorites(false);
-                        setSelectedType('all');
-                        setSelectedTag(null);
-                      }
-                    }}
-                    className="flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left cursor-pointer"
-                  >
-                    <span className="truncate">{cat.name}</span>
-                    <span className="text-xs bg-slate-800 px-2 py-0.5 rounded-full text-slate-400 flex-shrink-0">
-                      {count}
-                    </span>
-                  </button>
-
-                  {/* Deleting is only offered once the category is the active one. */}
-                  {isSelected && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteCategory(cat.id, e)}
-                      className="flex-shrink-0 mr-1.5 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
-                      title={`'${cat.name}' 카테고리 삭제`}
-                      aria-label={`'${cat.name}' 카테고리 삭제`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                  <span className="truncate pr-2">{cat.name}</span>
+                  <span className="text-xs bg-slate-800 px-2 py-0.5 rounded-full text-slate-400 flex-shrink-0">
+                    {count}
+                  </span>
+                </button>
               );
             })}
 
@@ -1916,9 +1897,10 @@ export default function App() {
               <span className="text-slate-500 ml-1">총 {filteredItems.length}개</span>
             </div>
 
-            {/* Right Actions: Select All & Bulk Delete Toolbar & Category Delete */}
-            {filteredItems.length > 0 && (
-              <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Right Actions: Select All & Bulk Delete, then Category Delete last */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {filteredItems.length > 0 && (
+                <>
                 {/* Select All Checkbox Button */}
                 <button
                   type="button"
@@ -1957,21 +1939,26 @@ export default function App() {
                     <span>일괄 삭제 ({selectedInCurrentCount})</span>
                   </button>
                 )}
+                </>
+              )}
 
-                {/* Category Delete Button (Appears when a specific custom category is active) */}
-                {selectedCategory !== 'all' && selectedCategory !== 'none' && categories.some((c) => c.id === selectedCategory) && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteCategory(selectedCategory)}
-                    className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700 text-xs font-medium transition-all shadow-sm flex-shrink-0 cursor-pointer group"
-                    title={`'${getCategoryName(selectedCategory)}' 카테고리 삭제`}
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-colors" />
-                    <span className="hidden sm:inline">카테고리 삭제</span>
-                  </button>
-                )}
-              </div>
-            )}
+              {/*
+                Rightmost, and deliberately outside the item-count guard: an
+                empty category is exactly the one you want to delete.
+              */}
+              {selectedCategory !== 'all' && selectedCategory !== 'none' && categories.some((c) => c.id === selectedCategory) && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCategory(selectedCategory)}
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-slate-900/80 hover:bg-rose-500/15 text-slate-400 hover:text-rose-300 border border-slate-800 hover:border-rose-500/40 text-xs font-medium transition-all shadow-sm flex-shrink-0 cursor-pointer group"
+                  title={`'${getCategoryName(selectedCategory)}' 카테고리 삭제`}
+                  aria-label={`'${getCategoryName(selectedCategory)}' 카테고리 삭제`}
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-rose-400 transition-colors" />
+                  <span className="hidden sm:inline">카테고리 삭제</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Items Display */}
