@@ -33,9 +33,12 @@ import {
   Play,
   Youtube,
   Menu,
-  AlertCircle
+  AlertCircle,
+  User,
+  LogIn
 } from 'lucide-react';
 import * as api from './lib/api';
+import { useAuth } from './auth';
 import ProfileDashboard from './ProfileDashboard';
 import ConfirmDialog, { type ConfirmRequest } from './ConfirmDialog';
 
@@ -202,9 +205,9 @@ const EXAMPLE_SENTENCES = [
 export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<ArchiveItem[]>([]);
+  const { userId, profile, ready: authReady, openLogin, signOut, requireAuth } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [profile, setProfile] = useState<api.UserProfile | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
 
@@ -295,9 +298,24 @@ export default function App() {
     setFavicon();
   }, []);
 
-  // Load the archive from Supabase, importing any legacy localStorage data once.
+  // Load the archive whenever the signed-in user changes. Signed out there is
+  // nothing to read — RLS scopes every row to its owner — so show an empty shell.
   useEffect(() => {
+    if (!authReady) return;
+
     let cancelled = false;
+
+    if (!userId) {
+      setCategories([]);
+      setItems([]);
+      setSelectedItemIds([]);
+      setSelectedDetailItem(null);
+      setLoadError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
 
     (async () => {
       try {
@@ -314,15 +332,11 @@ export default function App() {
           }
         }
 
-        const [cats, list, me] = await Promise.all([
-          api.fetchCategories(),
-          api.fetchItems(),
-          api.getCurrentUser(),
-        ]);
+        const [cats, list] = await Promise.all([api.fetchCategories(), api.fetchItems()]);
         if (cancelled) return;
         setCategories(cats);
         setItems(list);
-        setProfile(me);
+        setLoadError(null);
       } catch (err: any) {
         if (!cancelled) setLoadError(err?.message ?? '데이터를 불러오지 못했습니다.');
       } finally {
@@ -333,7 +347,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userId, authReady]);
 
   // Don't let a stale validation message greet the user next time they open it.
   useEffect(() => {
@@ -563,6 +577,7 @@ export default function App() {
   const handleUpdateItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
+    if (!requireAuth()) return;
 
     if (!editContent.trim() && !editImagePreview) {
       alert('저장할 내용을 입력하거나 이미지를 선택해 주세요.');
@@ -725,6 +740,7 @@ export default function App() {
 
   const handleCreateItem = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireAuth()) return;
     if (!newContent.trim() && !imagePreview) {
       alert('저장할 내용을 입력하거나 이미지를 선택해 주세요.');
       return;
@@ -771,6 +787,7 @@ export default function App() {
     e.preventDefault();
     const name = newCatName.trim();
     if (!name) return;
+    if (!requireAuth()) return;
 
     setCatError(null);
 
@@ -799,6 +816,7 @@ export default function App() {
 
   const handleDeleteCategory = (catId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!requireAuth()) return;
 
     const cat = categories.find((c) => c.id === catId);
     const affected = items.filter((item) => item.category === catId).length;
@@ -873,6 +891,7 @@ export default function App() {
 
   const toggleFavorite = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!requireAuth()) return;
     const current = items.find((item) => item.id === id);
     if (!current) return;
     const next = !current.isFavorite;
@@ -904,6 +923,7 @@ export default function App() {
       e.stopPropagation();
       e.preventDefault();
     }
+    if (!requireAuth()) return;
     const target = items.find((item) => item.id === id);
     askConfirm(
       {
@@ -939,6 +959,7 @@ export default function App() {
       e.stopPropagation();
       e.preventDefault();
     }
+    if (!requireAuth()) return;
     if (selectedItemIds.length === 0) return;
 
     const targetIds = [...selectedItemIds];
@@ -1148,6 +1169,7 @@ export default function App() {
         <div className="p-4 pb-3 space-y-2 border-b border-slate-800/80 flex-shrink-0">
           <button
             onClick={() => {
+              if (!requireAuth()) return;
               resetForm();
               setIsAddModalOpen(true);
               setIsMobileSidebarOpen(false);
@@ -1495,20 +1517,33 @@ export default function App() {
         {/* Profile — pinned to the bottom of the sidebar */}
         <button
           onClick={() => {
-            setIsProfileOpen(true);
             setIsMobileSidebarOpen(false);
+            if (userId) setIsProfileOpen(true);
+            else openLogin();
           }}
           className="flex-shrink-0 m-3 mt-2 px-2.5 py-2 flex items-center gap-2.5 rounded-xl border border-slate-800/80 bg-slate-950/60 hover:bg-slate-800/70 hover:border-slate-700 transition-all text-left cursor-pointer group"
-          title="내 프로필 & 대시보드"
+          title={userId ? '내 프로필 & 대시보드' : '로그인'}
         >
-          <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-md shadow-purple-900/30">
-            {(profile?.email?.[0] ?? '?').toUpperCase()}
+          <span
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-md ${
+              userId
+                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-purple-900/30'
+                : 'bg-slate-800 border border-slate-700 text-slate-400'
+            }`}
+          >
+            {userId ? (
+              (profile?.email?.[0] ?? '·').toUpperCase()
+            ) : (
+              <User className="w-4 h-4" />
+            )}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-xs font-medium text-slate-200 truncate group-hover:text-white transition-colors">
-              {profile?.email ?? '…'}
+              {userId ? profile?.email ?? '…' : '로그인'}
             </span>
-            <span className="block text-[10px] text-slate-500">아카이브 {items.length}개</span>
+            <span className="block text-[10px] text-slate-500">
+              {userId ? `아카이브 ${items.length}개` : '기록을 저장하려면 로그인하세요'}
+            </span>
           </span>
           <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-colors flex-shrink-0" />
         </button>
@@ -1726,19 +1761,33 @@ export default function App() {
               <div className="mb-3 sm:mb-4">
                 <NoteBoxLogo className="w-14 h-14 sm:w-16 sm:h-16 drop-shadow-[0_0_16px_rgba(168,85,247,0.4)] opacity-90" />
               </div>
-              <h3 className="text-sm sm:text-base font-semibold text-slate-300 mb-1">바구니에 담긴 아카이브 항목이 없습니다</h3>
+              <h3 className="text-sm sm:text-base font-semibold text-slate-300 mb-1">
+                {userId ? '바구니에 담긴 아카이브 항목이 없습니다' : 'NoteBox에 오신 것을 환영합니다'}
+              </h3>
               <p className="text-xs text-slate-500 max-w-sm mb-5 sm:mb-6">
-                새 항목을 업로드하고 설명 문장을 입력해보세요. AI가 핵심 태그를 스마트하게 자동 생성합니다.
+                {userId
+                  ? '새 항목을 업로드하고 설명 문장을 입력해보세요. AI가 핵심 태그를 스마트하게 자동 생성합니다.'
+                  : '텍스트 메모, 웹 링크, 이미지를 한곳에 모아두는 개인 아카이브입니다. 로그인하면 기록이 저장되고 어느 기기에서나 이어집니다.'}
               </p>
               <button
                 onClick={() => {
+                  if (!requireAuth()) return;
                   resetForm();
                   setIsAddModalOpen(true);
                 }}
                 className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-medium rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/20"
               >
-                <Plus className="w-4 h-4" />
-                새로 만들기
+                {userId ? (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    새로 만들기
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    로그인하고 시작하기
+                  </>
+                )}
               </button>
             </div>
           ) : viewMode === 'grid' ? (
@@ -2012,6 +2061,7 @@ export default function App() {
         {/* Mobile Floating Action Button (FAB) */}
         <button
           onClick={() => {
+            if (!requireAuth()) return;
             resetForm();
             setIsAddModalOpen(true);
           }}
@@ -3048,7 +3098,10 @@ export default function App() {
           items={items}
           categories={categories}
           onClose={() => setIsProfileOpen(false)}
-          onSignOut={() => api.signOut()}
+          onSignOut={() => {
+            setIsProfileOpen(false);
+            signOut();
+          }}
         />
       )}
 
