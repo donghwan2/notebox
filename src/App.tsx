@@ -201,6 +201,9 @@ function describeLoadError(err: any): string {
   return raw || '데이터를 불러오지 못했습니다.';
 }
 
+/** Matches the archive-images bucket's per-file limit. */
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 function fallbackExtractTags(text: string): string[] {
   if (!text || !text.trim()) return [];
   const raw = text.trim();
@@ -236,6 +239,12 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   /** Bumped by the retry button to re-run the load effect. */
   const [reloadKey, setReloadKey] = useState(0);
+  /** Signed URLs for images kept in Storage, keyed by their `storage:` ref. */
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  /** Picked files, uploaded on submit so cancelling leaves no orphans. */
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [editPendingFile, setEditPendingFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
 
   /** Wraps a destructive action in the confirm dialog. */
@@ -248,6 +257,13 @@ export default function App() {
       },
     });
   };
+
+  /**
+   * The URL to actually render for an item's image. Storage refs resolve
+   * through the signed-URL map; legacy base64 and external URLs pass through.
+   */
+  const imageSrc = (content: string): string =>
+    api.isStorageRef(content) ? signedUrls[content] ?? '' : content;
 
   // Helper to safely get category name
   const getCategoryName = (catId?: string) => {
@@ -374,6 +390,20 @@ export default function App() {
             setCategories(cats);
             setItems(list);
             setLoadError(null);
+
+            // Older rows inlined their image as base64; move those to Storage.
+            api
+              .migrateInlineImages(list)
+              .then(({ migrated, failed }) => {
+                if (cancelled || migrated.length === 0) return;
+                const byId = new Map(migrated.map((m) => [m.id, m]));
+                setItems((prev) => prev.map((i) => byId.get(i.id) ?? i));
+                showToast(
+                  `이미지 ${migrated.length}개를 저장소로 옮겼습니다.` +
+                    (failed > 0 ? ` (${failed}개 실패)` : '')
+                );
+              })
+              .catch((err) => console.warn('[NoteBox] 이미지 이전 실패:', err));
             return;
           } catch (err: any) {
             lastErr = err;
@@ -393,6 +423,33 @@ export default function App() {
       cancelled = true;
     };
   }, [userId, authReady, reloadKey]);
+
+  // Storage-backed images need a signed URL before they can be rendered.
+  useEffect(() => {
+    const missing = Array.from(
+      new Set<string>(
+        items
+          .filter((i) => i.type === 'image' && api.isStorageRef(i.content))
+          .map((i) => i.content)
+          .filter((ref) => !signedUrls[ref])
+      )
+    );
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    api
+      .signImageRefs(missing)
+      .then((map) => {
+        if (!cancelled && Object.keys(map).length > 0) {
+          setSignedUrls((prev) => ({ ...prev, ...map }));
+        }
+      })
+      .catch((err) => console.warn('[NoteBox] 이미지 URL 서명 실패:', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, signedUrls]);
 
   // Don't let a stale validation message greet the user next time they open it.
   useEffect(() => {
@@ -506,7 +563,9 @@ export default function App() {
     setEditDescription(item.description);
     setEditTags(item.tags || []);
     setEditCustomTagInput('');
-    setEditImagePreview(item.type === 'image' ? item.content : '');
+    setEditImagePreview(item.type === 'image' ? imageSrc(item.content) : '');
+    setEditPendingFile(null);
+    setIsUploading(false);
     setIsEditGeneratingTags(false);
     setEditAiTagSource(null);
     setIsEditModalOpen(true);
@@ -581,6 +640,11 @@ export default function App() {
       alert('이미지 파일(PNG, JPG, WebP 등)만 업로드 가능합니다.');
       return;
     }
+    if (file.size > MAX_IMAGE_BYTES) {
+      alert(`이미지 크기는 ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)}MB 이하만 가능합니다.`);
+      return;
+    }
+    setEditPendingFile(file);
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result as string;
@@ -632,7 +696,20 @@ export default function App() {
     const detectedType = detectContentType(editContent, editImagePreview);
     let finalContent = editContent.trim();
     if (detectedType === 'image' && editImagePreview) {
-      finalContent = editImagePreview;
+      if (editPendingFile) {
+        setIsUploading(true);
+        try {
+          finalContent = await api.uploadImage(editPendingFile);
+        } catch (err: any) {
+          setIsUploading(false);
+          alert(`이미지 업로드에 실패했습니다: ${err?.message ?? err}`);
+          return;
+        }
+        setIsUploading(false);
+      } else {
+        // Unchanged image: keep whatever reference the row already had.
+        finalContent = editingItem.type === 'image' ? editingItem.content : editImagePreview;
+      }
     } else if (detectedType === 'link' && !/^https?:\/\//i.test(finalContent)) {
       if (!finalContent.startsWith('http://') && !finalContent.startsWith('https://')) {
         finalContent = `https://${finalContent}`;
@@ -729,6 +806,12 @@ export default function App() {
       alert('이미지 파일(PNG, JPG, WebP 등)만 업로드 가능합니다.');
       return;
     }
+    if (file.size > MAX_IMAGE_BYTES) {
+      alert(`이미지 크기는 ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)}MB 이하만 가능합니다.`);
+      return;
+    }
+    // The data URL is only a local preview; the file itself goes to Storage on save.
+    setPendingFile(file);
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result as string;
@@ -795,7 +878,20 @@ export default function App() {
 
     let finalContent = newContent.trim();
     if (detectedType === 'image' && imagePreview) {
-      finalContent = imagePreview;
+      // Upload to Storage and keep only the reference in the row.
+      if (pendingFile) {
+        setIsUploading(true);
+        try {
+          finalContent = await api.uploadImage(pendingFile);
+        } catch (err: any) {
+          setIsUploading(false);
+          alert(`이미지 업로드에 실패했습니다: ${err?.message ?? err}`);
+          return;
+        }
+        setIsUploading(false);
+      } else {
+        finalContent = imagePreview;
+      }
     } else if (detectedType === 'link' && !/^https?:\/\//i.test(finalContent)) {
       if (!finalContent.startsWith('http://') && !finalContent.startsWith('https://')) {
         finalContent = `https://${finalContent}`;
@@ -912,6 +1008,8 @@ export default function App() {
   };
 
   const resetForm = () => {
+    setPendingFile(null);
+    setIsUploading(false);
     setNewType('text');
     setNewCategory('none');
     setNewContent('');
@@ -983,6 +1081,7 @@ export default function App() {
 
   const performDeleteItem = async (id: string) => {
     const snapshot = items;
+    const target = items.find((i) => i.id === id);
 
     setItems((prev) => prev.filter((item) => item.id !== id));
     setSelectedItemIds((prev) => prev.filter((itemId) => itemId !== id));
@@ -992,6 +1091,11 @@ export default function App() {
 
     try {
       await api.deleteItem(id);
+      if (target && api.isStorageRef(target.content)) {
+        api.deleteImage(target.content).catch((err) =>
+          console.warn('[NoteBox] 이미지 파일 정리 실패:', err)
+        );
+      }
       showToast('아카이브 항목이 삭제되었습니다.');
     } catch (err: any) {
       setItems(snapshot);
@@ -1030,6 +1134,13 @@ export default function App() {
 
     try {
       await api.deleteItems(targetIds);
+      for (const item of snapshot) {
+        if (targetIds.includes(item.id) && api.isStorageRef(item.content)) {
+          api.deleteImage(item.content).catch((err) =>
+            console.warn('[NoteBox] 이미지 파일 정리 실패:', err)
+          );
+        }
+      }
       showToast(`선택한 ${count}개 항목이 일괄 삭제되었습니다.`);
     } catch (err: any) {
       setItems(snapshot);
@@ -1850,8 +1961,9 @@ export default function App() {
               {filteredItems.map((item) => {
                 const isImage = item.type === 'image' && item.content;
                 const ytThumbnail = item.type === 'link' ? getYoutubeThumbnail(item.content) : null;
-                const hasPreview = Boolean(isImage || ytThumbnail);
-                const previewSrc = isImage ? item.content : ytThumbnail!;
+                const previewSrc = isImage ? imageSrc(item.content) : ytThumbnail!;
+                // A storage image has no src until its signed URL arrives.
+                const hasPreview = Boolean(previewSrc);
                 const isSelected = selectedItemIds.includes(item.id);
 
                 return (
@@ -2015,8 +2127,9 @@ export default function App() {
               {filteredItems.map((item) => {
                 const isImage = item.type === 'image' && item.content;
                 const ytThumbnail = item.type === 'link' ? getYoutubeThumbnail(item.content) : null;
-                const hasPreview = Boolean(isImage || ytThumbnail);
-                const previewSrc = isImage ? item.content : ytThumbnail!;
+                const previewSrc = isImage ? imageSrc(item.content) : ytThumbnail!;
+                // A storage image has no src until its signed URL arrives.
+                const hasPreview = Boolean(previewSrc);
                 const isSelected = selectedItemIds.includes(item.id);
 
                 return (
@@ -2471,9 +2584,11 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+                  disabled={isUploading}
+                  className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-2"
                 >
-                  아카이브 저장하기
+                  {isUploading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  {isUploading ? '이미지 업로드 중…' : '아카이브 저장하기'}
                 </button>
               </div>
             </form>
@@ -2623,10 +2738,10 @@ export default function App() {
             </h2>
 
             {/* Content by Type */}
-            {selectedDetailItem.type === 'image' && (
+            {selectedDetailItem.type === 'image' && imageSrc(selectedDetailItem.content) && (
               <div className="rounded-xl overflow-hidden border border-slate-800 mb-4 bg-slate-950 relative group">
                 <a
-                  href={selectedDetailItem.content}
+                  href={imageSrc(selectedDetailItem.content)}
                   download={`${(selectedDetailItem.description || 'image')
                     .trim()
                     .replace(/[\\/:*?"<>|]/g, '_')
@@ -2634,13 +2749,13 @@ export default function App() {
                   onClick={(e) => {
                     // Also support direct click to trigger custom clean filename download
                     e.preventDefault();
-                    downloadImage(selectedDetailItem.content, selectedDetailItem.description);
+                    downloadImage(imageSrc(selectedDetailItem.content), selectedDetailItem.description);
                   }}
                   className="block cursor-pointer"
                   title="클릭 시 이미지 다운로드 / 우클릭하여 '이미지를 다른 이름으로 저장' 가능"
                 >
                   <img
-                    src={selectedDetailItem.content}
+                    src={imageSrc(selectedDetailItem.content)}
                     alt={selectedDetailItem.description}
                     title={selectedDetailItem.description}
                     className="w-full h-auto max-h-96 object-contain mx-auto"
@@ -2649,7 +2764,7 @@ export default function App() {
                 <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     type="button"
-                    onClick={(e) => downloadImage(selectedDetailItem.content, selectedDetailItem.description, e)}
+                    onClick={(e) => downloadImage(imageSrc(selectedDetailItem.content), selectedDetailItem.description, e)}
                     className="bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg backdrop-blur-sm cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5 text-indigo-400" />
@@ -3131,10 +3246,15 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-1.5"
+                  disabled={isUploading}
+                  className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>수정 사항 저장</span>
+                  {isUploading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isUploading ? '이미지 업로드 중…' : '수정 사항 저장'}</span>
                 </button>
               </div>
             </form>

@@ -3,6 +3,22 @@ import type { ArchiveItemRow, CategoryRow } from './database.types';
 import type { ArchiveItem, ArchiveType, Category } from '../App';
 
 const IMAGE_BUCKET = 'archive-images';
+const STORAGE_PREFIX = 'storage:';
+/** Long enough to outlast a working session; refreshed on every load. */
+const SIGNED_URL_TTL = 60 * 60 * 12;
+
+/** `content` holds `storage:{path}` for images kept in the bucket. */
+export function toStorageRef(path: string): string {
+  return `${STORAGE_PREFIX}${path}`;
+}
+
+export function parseStorageRef(content: string): string | null {
+  return content?.startsWith(STORAGE_PREFIX) ? content.slice(STORAGE_PREFIX.length) : null;
+}
+
+export function isStorageRef(content: string): boolean {
+  return Boolean(content) && content.startsWith(STORAGE_PREFIX);
+}
 
 /** 'YYYY.MM.DD HH:mm' — the format the UI already renders. */
 function formatCreatedAt(iso: string): string {
@@ -217,36 +233,87 @@ export async function deleteItems(ids: string[]): Promise<void> {
  * Uploads an image to the private bucket and returns a long-lived signed URL.
  * Storing files here keeps base64 blobs out of Postgres rows.
  */
-export async function uploadImage(file: File): Promise<{ path: string; url: string }> {
+export async function uploadImage(file: File): Promise<string> {
   const userId = await requireUserId();
-  const ext = file.name.split('.').pop() || 'png';
-  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const path = `${userId}/${crypto.randomUUID()}.${ext || 'png'}`;
 
-  const { error: uploadError } = await supabase.storage
+  const { error } = await supabase.storage
     .from(IMAGE_BUCKET)
     .upload(path, file, { contentType: file.type, upsert: false });
-  if (uploadError) throw uploadError;
+  if (error) throw error;
+
+  return toStorageRef(path);
+}
+
+/** Uploads a `data:` URL, used when migrating rows that inlined their image. */
+export async function uploadDataUrl(dataUrl: string): Promise<string> {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const ext = (blob.type.split('/')[1] || 'png').split('+')[0];
+  const file = new File([blob], `image.${ext}`, { type: blob.type || 'image/png' });
+  return uploadImage(file);
+}
+
+/**
+ * Signs many paths at once. Returns a { ref -> url } map; refs that fail to
+ * sign are simply absent so one bad object cannot blank the whole grid.
+ */
+export async function signImageRefs(
+  refs: string[],
+  expiresInSeconds = SIGNED_URL_TTL
+): Promise<Record<string, string>> {
+  const paths = refs.map(parseStorageRef).filter((p): p is string => Boolean(p));
+  if (paths.length === 0) return {};
 
   const { data, error } = await supabase.storage
     .from(IMAGE_BUCKET)
-    .createSignedUrl(path, 60 * 60 * 24 * 365);
+    .createSignedUrls(paths, expiresInSeconds);
   if (error) throw error;
 
-  return { path, url: data.signedUrl };
+  const out: Record<string, string> = {};
+  for (const row of data ?? []) {
+    if (row.signedUrl && row.path) out[toStorageRef(row.path)] = row.signedUrl;
+  }
+  return out;
 }
 
-/** Re-signs a stored object path — signed URLs expire. */
-export async function signImageUrl(path: string, expiresInSeconds = 60 * 60): Promise<string> {
-  const { data, error } = await supabase.storage
-    .from(IMAGE_BUCKET)
-    .createSignedUrl(path, expiresInSeconds);
-  if (error) throw error;
-  return data.signedUrl;
-}
-
-export async function deleteImage(path: string): Promise<void> {
+export async function deleteImage(ref: string): Promise<void> {
+  const path = parseStorageRef(ref);
+  if (!path) return;
   const { error } = await supabase.storage.from(IMAGE_BUCKET).remove([path]);
   if (error) throw error;
+}
+
+/**
+ * Moves any image still inlined as a `data:` URL into Storage and rewrites the
+ * row to hold only its reference. Safe to run repeatedly: rows already using a
+ * `storage:` ref are skipped, and a row is only rewritten after its upload
+ * succeeds, so a failure leaves the original bytes untouched.
+ */
+export async function migrateInlineImages(
+  items: ArchiveItem[]
+): Promise<{ migrated: ArchiveItem[]; failed: number }> {
+  const pending = items.filter(
+    (i) => i.type === 'image' && i.content.startsWith('data:image/')
+  );
+  if (pending.length === 0) return { migrated: [], failed: 0 };
+
+  const migrated: ArchiveItem[] = [];
+  let failed = 0;
+
+  for (const item of pending) {
+    try {
+      const ref = await uploadDataUrl(item.content);
+      const updated = await updateItem(item.id, { content: ref });
+      migrated.push(updated);
+    } catch (err) {
+      failed += 1;
+      console.warn(`[NoteBox] 이미지 이전 실패 (${item.id}):`, err);
+    }
+  }
+
+  return { migrated, failed };
 }
 
 /* ------------------------------------------------- localStorage migration */
