@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2, LogIn, UserPlus, AlertCircle, MailCheck } from 'lucide-react';
 import { NoteBoxLogo } from './App';
 import { getSession, onAuthStateChange, signIn, signUp } from './lib/api';
+import { isSupabaseConfigured, missingSupabaseEnv } from './lib/supabase';
 
 type Mode = 'signin' | 'signup';
 
@@ -17,6 +18,10 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setChecking(false);
+      return;
+    }
     getSession()
       .then((session) => setUserId(session?.user.id ?? null))
       .finally(() => setChecking(false));
@@ -49,6 +54,37 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       setBusy(false);
     }
   };
+
+  // A deploy built without the Supabase env vars would otherwise render nothing at all.
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-slate-950 px-4 text-slate-100">
+        <div className="w-full max-w-md bg-slate-900/70 border border-rose-500/30 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <h1 className="font-semibold text-white">설정이 필요합니다</h1>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                Supabase 환경변수가 빌드에 포함되지 않았습니다. 아래 값을 호스팅
+                환경변수에 등록한 뒤 <strong className="text-slate-200">다시 배포</strong>해야
+                합니다. 이 값들은 빌드 시점에 번들에 삽입되므로 저장만으로는 반영되지 않습니다.
+              </p>
+            </div>
+          </div>
+          <ul className="mt-4 space-y-1.5">
+            {missingSupabaseEnv.map((name) => (
+              <li
+                key={name}
+                className="text-xs font-mono text-rose-300 bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-2"
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }
 
   if (checking) {
     return (
