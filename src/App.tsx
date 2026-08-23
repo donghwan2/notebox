@@ -176,6 +176,31 @@ export function NoteBoxLogo({ className = 'w-10 h-10' }: { className?: string })
 // Default categories are seeded per-user in Postgres by the
 // `handle_new_user` trigger on signup, not here.
 
+/**
+ * Failures that clear by themselves — a token whose `iat` is a hair ahead of
+ * the API's clock, or a dropped connection — so retrying is worthwhile.
+ */
+function isTransientLoadError(err: any): boolean {
+  const msg = String(err?.message ?? err ?? '').toLowerCase();
+  return (
+    msg.includes('issued at future') ||
+    msg.includes('jwt') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('load failed')
+  );
+}
+
+function describeLoadError(err: any): string {
+  const raw = String(err?.message ?? err ?? '');
+  if (raw.toLowerCase().includes('issued at future')) {
+    // The token's iat comes from the auth server, so this is a momentary skew
+    // between Supabase's own services rather than anything the user set.
+    return '인증 토큰이 일시적으로 거부됐습니다. 잠시 후 저절로 해결되는 문제이니 다시 시도해 주세요.';
+  }
+  return raw || '데이터를 불러오지 못했습니다.';
+}
+
 function fallbackExtractTags(text: string): string[] {
   if (!text || !text.trim()) return [];
   const raw = text.trim();
@@ -209,6 +234,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  /** Bumped by the retry button to re-run the load effect. */
+  const [reloadKey, setReloadKey] = useState(0);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
 
   /** Wraps a destructive action in the confirm dialog. */
@@ -332,13 +359,31 @@ export default function App() {
           }
         }
 
-        const [cats, list] = await Promise.all([api.fetchCategories(), api.fetchItems()]);
-        if (cancelled) return;
-        setCategories(cats);
-        setItems(list);
-        setLoadError(null);
+        // A freshly minted token can be a moment ahead of the API's clock
+        // ("JWT issued at future"), and a cold start can drop the first call.
+        // Both clear on their own, so retry before showing a dead end.
+        let lastErr: any;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, 500 * 2 ** (attempt - 1)));
+            if (cancelled) return;
+          }
+          try {
+            const [cats, list] = await Promise.all([api.fetchCategories(), api.fetchItems()]);
+            if (cancelled) return;
+            setCategories(cats);
+            setItems(list);
+            setLoadError(null);
+            return;
+          } catch (err: any) {
+            lastErr = err;
+            if (!isTransientLoadError(err)) break;
+            console.warn(`[NoteBox] 로드 재시도 ${attempt + 1}/4:`, err?.message ?? err);
+          }
+        }
+        throw lastErr;
       } catch (err: any) {
-        if (!cancelled) setLoadError(err?.message ?? '데이터를 불러오지 못했습니다.');
+        if (!cancelled) setLoadError(describeLoadError(err));
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -347,7 +392,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [userId, authReady]);
+  }, [userId, authReady, reloadKey]);
 
   // Don't let a stale validation message greet the user next time they open it.
   useEffect(() => {
@@ -1102,13 +1147,22 @@ export default function App() {
   if (loadError) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-slate-950 px-6 text-center">
-        <p className="text-sm text-rose-300">{loadError}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors cursor-pointer"
-        >
-          다시 시도
-        </button>
+        <NoteBoxLogo className="w-12 h-12 opacity-70" />
+        <p className="text-sm text-rose-300 max-w-sm leading-relaxed">{loadError}</p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors cursor-pointer"
+          >
+            다시 시도
+          </button>
+          <button
+            onClick={signOut}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+          >
+            로그아웃
+          </button>
+        </div>
       </div>
     );
   }
