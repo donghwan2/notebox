@@ -1269,6 +1269,17 @@ export default function App() {
     );
   }, [filteredItems, selectedItemIds]);
 
+  /** Clears every filter and search, returning to the default archive view. */
+  const goHome = () => {
+    setSelectedCategory('all');
+    setSelectedType('all');
+    setSelectedTag(null);
+    setOnlyFavorites(false);
+    setSearchQuery('');
+    setSelectedDetailItem(null);
+    setIsMobileSidebarOpen(false);
+  };
+
   const handleSelectAll = (e?: React.MouseEvent | React.ChangeEvent) => {
     if (e) e.stopPropagation();
     const currentFilteredIds = filteredItems.map((item) => item.id);
@@ -1333,14 +1344,20 @@ export default function App() {
       >
         {/* App Header */}
         <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <NoteBoxLogo className="w-10 h-10 flex-shrink-0 drop-shadow-[0_0_12px_rgba(168,85,247,0.45)]" />
+          <button
+            type="button"
+            onClick={goHome}
+            className="flex items-center gap-2.5 min-w-0 rounded-xl -m-1 p-1 hover:bg-slate-800/50 transition-colors cursor-pointer group"
+            title="처음 화면으로"
+            aria-label="처음 화면으로"
+          >
+            <NoteBoxLogo className="w-10 h-10 flex-shrink-0 drop-shadow-[0_0_12px_rgba(168,85,247,0.45)] group-hover:drop-shadow-[0_0_16px_rgba(168,85,247,0.7)] transition-all" />
             <div className="truncate">
               <h1 className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-purple-300 via-pink-200 to-indigo-200 bg-clip-text text-transparent">
                 NoteBox
               </h1>
             </div>
-          </div>
+          </button>
           <div className="flex items-center gap-1">
             {/* Desktop Sidebar Collapse Button */}
             <button
@@ -1382,14 +1399,7 @@ export default function App() {
 
           {/* Fixed '모든 아카이브' button (Always visible, unaffected by scroll) */}
           <button
-            onClick={() => {
-              setSelectedCategory('all');
-              setSelectedType('all');
-              setSelectedTag(null);
-              setOnlyFavorites(false);
-              setSearchQuery('');
-              setIsMobileSidebarOpen(false);
-            }}
+            onClick={goHome}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
               selectedCategory === 'all' && selectedType === 'all' && !onlyFavorites && !selectedTag && !searchQuery
                 ? 'bg-indigo-600/25 text-indigo-300 border border-indigo-500/40 shadow-sm'
