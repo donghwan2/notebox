@@ -204,6 +204,41 @@ function describeLoadError(err: any): string {
 /** Matches the archive-images bucket's per-file limit. */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
+/** Longest first so "에서는" wins over "는". */
+const MULTI_PARTICLES = [
+  '이라고', '에서는', '에게서', '으로는', '이라는',
+  '에서', '으로', '에게', '한테', '까지', '부터', '보다', '처럼', '라고',
+];
+const SINGLE_PARTICLES = ['은', '는', '이', '가', '을', '를', '에', '의', '도', '과', '와', '로', '만'];
+
+/**
+ * Trims a trailing Korean particle so "회사에서" becomes "회사".
+ *
+ * Deliberately conservative. Multi-syllable particles are unambiguous, but a
+ * single one cannot be told apart from a word that simply ends that way —
+ * "세상이" and "고양이" have identical shapes. So a single-syllable particle is
+ * only removed when the stem ends in a non-Hangul character ("ai가" -> "ai"),
+ * where it cannot be part of the word. Everything else is left intact:
+ * a tag with an extra syllable beats one that lost its meaning.
+ *
+ * Gemini produces the real tags; this only runs when that call is unavailable.
+ */
+export function stripParticles(word: string): string {
+  if (!/[가-힣]$/.test(word)) return word;
+
+  for (const p of MULTI_PARTICLES) {
+    if (word.endsWith(p) && word.length - p.length >= 2) return word.slice(0, -p.length);
+  }
+
+  for (const p of SINGLE_PARTICLES) {
+    if (!word.endsWith(p)) continue;
+    const stem = word.slice(0, -1);
+    if (stem.length >= 2 && !/[가-힣]$/.test(stem)) return stem;
+  }
+
+  return word;
+}
+
 function fallbackExtractTags(text: string): string[] {
   if (!text || !text.trim()) return [];
   const raw = text.trim();
@@ -217,7 +252,7 @@ function fallbackExtractTags(text: string): string[] {
   const words = raw
     .replace(/[#@,./!?;:()[\]{}"'“”~…·\\|\n\r]/g, ' ')
     .split(/\s+/)
-    .map((w) => w.trim())
+    .map((w) => stripParticles(w.trim()))
     .filter((w) => w.length >= 2 && !stopWords.has(w) && !/^\d+$/.test(w));
 
   return Array.from(new Set(words)).slice(0, 5);
