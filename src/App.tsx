@@ -1604,28 +1604,47 @@ export default function App() {
               const count = items.filter((i) => i.category === cat.id).length;
               const isSelected = selectedCategory === cat.id;
               return (
-                <button
+                // A row, not a button: the delete control cannot nest inside one.
+                <div
                   key={cat.id}
-                  onClick={() => {
-                    const nextCat = isSelected ? 'all' : cat.id;
-                    setSelectedCategory(nextCat);
-                    if (nextCat !== 'all') {
-                      setOnlyFavorites(false);
-                      setSelectedType('all');
-                      setSelectedTag(null);
-                    }
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all cursor-pointer ${
+                  className={`w-full flex items-center rounded-xl text-sm transition-all ${
                     isSelected
                       ? 'bg-slate-800 text-white font-medium border border-slate-700 shadow-sm'
                       : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                   }`}
                 >
-                  <span className="truncate pr-2">{cat.name}</span>
-                  <span className="text-xs bg-slate-800 px-2 py-0.5 rounded-full text-slate-400 flex-shrink-0">
-                    {count}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextCat = isSelected ? 'all' : cat.id;
+                      setSelectedCategory(nextCat);
+                      if (nextCat !== 'all') {
+                        setOnlyFavorites(false);
+                        setSelectedType('all');
+                        setSelectedTag(null);
+                      }
+                    }}
+                    className="flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left cursor-pointer"
+                  >
+                    <span className="truncate">{cat.name}</span>
+                    <span className="text-xs bg-slate-800 px-2 py-0.5 rounded-full text-slate-400 flex-shrink-0">
+                      {count}
+                    </span>
+                  </button>
+
+                  {/* Deleting is only offered once the category is the active one. */}
+                  {isSelected && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteCategory(cat.id, e)}
+                      className="flex-shrink-0 mr-1.5 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
+                      title={`'${cat.name}' 카테고리 삭제`}
+                      aria-label={`'${cat.name}' 카테고리 삭제`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               );
             })}
 
