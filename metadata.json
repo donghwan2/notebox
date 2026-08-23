@@ -1,0 +1,8 @@
+{
+  "name": "NoteBox",
+  "description": "스마트 퍼스널 아카이브 플랫폼 - 텍스트, 웹 링크, 이미지 등을 한곳에 모으고 분류하는 서비스",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
