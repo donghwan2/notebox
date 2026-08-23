@@ -1,1 +1,24 @@
 @import "tailwindcss";
+
+/*
+ * The app is dark-only. Declaring it lets the browser render its own form UI
+ * (input text, caret, password reveal icon, scrollbars, pickers) for a dark
+ * background instead of defaulting to black-on-black.
+ */
+:root {
+  color-scheme: dark;
+}
+
+/*
+ * Chrome paints autofilled fields with its own light background and ignores
+ * background-color, so a filled email/password would still be unreadable.
+ * An inset shadow is the only way to override the fill.
+ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-slate-100);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-slate-950) inset;
+  caret-color: var(--color-slate-100);
+  transition: background-color 9999s ease-out 0s;
+}
