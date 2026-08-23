@@ -2273,7 +2273,7 @@ export default function App() {
             resetForm();
             setIsAddModalOpen(true);
           }}
-          className="md:hidden fixed bottom-6 right-5 z-30 w-13 h-13 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-white shadow-xl shadow-purple-950/90 flex items-center justify-center border border-indigo-400/40 active:scale-95 transition-transform cursor-pointer"
+          className="md:hidden fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-5 z-30 w-13 h-13 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-white shadow-xl shadow-purple-950/90 flex items-center justify-center border border-indigo-400/40 active:scale-95 transition-transform cursor-pointer"
           aria-label="새 항목 아카이빙"
           title="새 항목 아카이빙"
         >
@@ -3322,7 +3322,7 @@ export default function App() {
 
       {/* Floating Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-slate-700 text-slate-100 px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md flex items-center gap-2.5 text-xs font-medium animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed right-4 md:right-6 bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-6 z-50 bg-slate-900/95 border border-slate-700 text-slate-100 px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md flex items-center gap-2.5 text-xs font-medium animate-in fade-in slide-in-from-bottom-2">
           <Trash2 className="w-4 h-4 text-rose-400 flex-shrink-0" />
           <span>{toastMessage}</span>
         </div>
