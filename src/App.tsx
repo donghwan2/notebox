@@ -32,7 +32,8 @@ import {
   Download,
   Play,
   Youtube,
-  Menu
+  Menu,
+  AlertCircle
 } from 'lucide-react';
 import * as api from './lib/api';
 import ProfileDashboard from './ProfileDashboard';
@@ -274,6 +275,7 @@ export default function App() {
   // Form states for new category
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('📁');
+  const [catError, setCatError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -332,6 +334,11 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  // Don't let a stale validation message greet the user next time they open it.
+  useEffect(() => {
+    if (!isCategoryModalOpen) setCatError(null);
+  }, [isCategoryModalOpen]);
 
   // Handle ESC key to close any open modal
   useEffect(() => {
@@ -762,16 +769,31 @@ export default function App() {
 
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCatName.trim()) return;
+    const name = newCatName.trim();
+    if (!name) return;
+
+    setCatError(null);
+
+    // Names are unique per user in Postgres; check here first so the user gets
+    // an instant, readable message instead of a constraint violation.
+    if (categories.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) {
+      setCatError('이미 존재하는 카테고리 입니다.');
+      return;
+    }
 
     try {
-      const newCat = await api.createCategory(newCatName.trim(), newCatIcon.trim() || '📁');
+      const newCat = await api.createCategory(name, newCatIcon.trim() || '📁');
       setCategories((prev) => [...prev, newCat]);
       setNewCategory(newCat.id);
       setNewCatName('');
       setIsCategoryModalOpen(false);
     } catch (err: any) {
-      alert(`카테고리 생성에 실패했습니다: ${err?.message ?? err}`);
+      // 23505 = unique_violation, in case the row was created elsewhere meanwhile.
+      if (err?.code === '23505') {
+        setCatError('이미 존재하는 카테고리 입니다.');
+        return;
+      }
+      setCatError(`카테고리 생성에 실패했습니다: ${err?.message ?? err}`);
     }
   };
 
@@ -2388,8 +2410,16 @@ export default function App() {
                     required
                     placeholder="카테고리 이름 (예: 독서 & 서평)"
                     value={newCatName}
-                    onChange={(e) => setNewCatName(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                    onChange={(e) => {
+                      setNewCatName(e.target.value);
+                      if (catError) setCatError(null);
+                    }}
+                    aria-invalid={catError ? true : undefined}
+                    className={`flex-1 bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none transition-colors ${
+                      catError
+                        ? 'border-rose-500/60 focus:border-rose-500'
+                        : 'border-slate-800 focus:border-indigo-500'
+                    }`}
                   />
                   <button
                     type="submit"
@@ -2398,6 +2428,16 @@ export default function App() {
                     추가
                   </button>
                 </div>
+
+                {catError && (
+                  <p
+                    role="alert"
+                    className="flex items-center gap-1.5 text-xs text-rose-300 animate-in fade-in slide-in-from-top-1 duration-150"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {catError}
+                  </p>
+                )}
               </form>
 
               {/* Existing Categories List & Deletion */}
