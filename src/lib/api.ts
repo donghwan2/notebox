@@ -221,6 +221,15 @@ export async function deleteItem(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function moveItemsToCategory(ids: string[], category: string): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from('archive_items')
+    .update({ category_id: toCategoryId(category) })
+    .in('id', ids);
+  if (error) throw error;
+}
+
 export async function deleteItems(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const { error } = await supabase.from('archive_items').delete().in('id', ids);

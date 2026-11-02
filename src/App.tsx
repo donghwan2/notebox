@@ -243,6 +243,13 @@ export default function App() {
   const imageSrc = (content: string): string =>
     api.isStorageRef(content) ? signedUrls[content] ?? '' : content;
 
+  // Every category list in the UI shows names in Korean collation order
+  // (numbers compared numerically), regardless of creation order.
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true })),
+    [categories]
+  );
+
   // Helper to safely get category name
   const getCategoryName = (catId?: string) => {
     if (!catId || catId === 'none') return '카테고리 없음';
@@ -1176,6 +1183,28 @@ export default function App() {
     }
   };
 
+  const moveSelectedItems = async (category: string) => {
+    if (!requireAuth()) return;
+    if (selectedItemIds.length === 0) return;
+
+    const targetIds = [...selectedItemIds];
+    const snapshot = items;
+    const label = category === 'none' ? '카테고리 없음' : getCategoryName(category);
+
+    setItems((prev) => prev.map((item) => (targetIds.includes(item.id) ? { ...item, category } : item)));
+    setSelectedDetailItem((prev) => (prev && targetIds.includes(prev.id) ? { ...prev, category } : prev));
+    setSelectedItemIds([]);
+
+    try {
+      await api.moveItemsToCategory(targetIds, category);
+      showToast(`선택한 ${targetIds.length}개 항목을 '${label}'(으)로 이동했습니다.`);
+    } catch (err: any) {
+      setItems(snapshot);
+      setSelectedItemIds(targetIds);
+      showToast(`카테고리 이동에 실패했습니다: ${err?.message ?? err}`);
+    }
+  };
+
   const copyToClipboard = (text: string, id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     navigator.clipboard.writeText(text);
@@ -1602,7 +1631,7 @@ export default function App() {
               </button>
             </div>
 
-            {categories.map((cat) => {
+            {sortedCategories.map((cat) => {
               const count = items.filter((i) => i.category === cat.id).length;
               const isSelected = selectedCategory === cat.id;
               return (
@@ -1819,7 +1848,7 @@ export default function App() {
                 className="appearance-none bg-slate-900 border border-slate-800 text-[11px] sm:text-xs font-medium text-slate-200 rounded-xl pl-2.5 sm:pl-3 pr-7 sm:pr-8 py-1.5 sm:py-2 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm hover:border-slate-700 transition-colors max-w-[120px] sm:max-w-none truncate"
               >
                 <option value="all">전체 ({items.length})</option>
-                {categories.map((cat) => (
+                {sortedCategories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name} ({items.filter((i) => i.category === cat.id).length})
                   </option>
@@ -1928,6 +1957,33 @@ export default function App() {
                     </span>
                   )}
                 </button>
+
+                {/* Bulk Category Move */}
+                {selectedInCurrentCount > 0 && (
+                  <div className="relative inline-flex items-center animate-in fade-in">
+                    <Layers className="w-3.5 h-3.5 text-indigo-400 absolute left-2.5 sm:left-3 pointer-events-none" />
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) moveSelectedItems(e.target.value);
+                      }}
+                      className="appearance-none pl-7 sm:pl-8 pr-6 py-1 sm:py-1.5 rounded-xl bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-300 border border-indigo-500/40 text-xs font-semibold transition-all shadow-sm cursor-pointer focus:outline-none focus:border-indigo-500"
+                      title={`선택한 ${selectedInCurrentCount}개 항목의 카테고리 변경`}
+                      aria-label={`선택한 ${selectedInCurrentCount}개 항목의 카테고리 변경`}
+                    >
+                      <option value="" disabled>
+                        카테고리 이동
+                      </option>
+                      {sortedCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                      <option value="none">카테고리 없음</option>
+                    </select>
+                    <ChevronDown className="w-3 h-3 text-indigo-400 absolute right-2 pointer-events-none" />
+                  </div>
+                )}
 
                 {/* Bulk Delete Button */}
                 {selectedInCurrentCount > 0 && (
@@ -2339,7 +2395,7 @@ export default function App() {
                     className="w-full appearance-none bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer transition-colors pr-10"
                   >
                     <option value="none">카테고리 없음</option>
-                    {categories.map((cat) => (
+                    {sortedCategories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}
                       </option>
@@ -2642,7 +2698,7 @@ export default function App() {
       {/* Add & Manage Categories Modal */}
       {isCategoryModalOpen && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[55] flex items-center justify-center p-4 cursor-pointer"
           onClick={() => setIsCategoryModalOpen(false)}
         >
           <div
@@ -2711,7 +2767,7 @@ export default function App() {
                   <span className="text-[10px] text-slate-500">연필로 이름 변경 · 휴지통으로 삭제</span>
                 </div>
                 <div className="space-y-1.5 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
-                  {categories.map((cat) => {
+                  {sortedCategories.map((cat) => {
                     const count = items.filter((i) => i.category === cat.id).length;
                     if (renamingCatId === cat.id) {
                       return (
@@ -3072,7 +3128,7 @@ export default function App() {
                     className="w-full appearance-none bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer transition-colors pr-10"
                   >
                     <option value="none">카테고리 없음</option>
-                    {categories.map((cat) => (
+                    {sortedCategories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}
                       </option>
