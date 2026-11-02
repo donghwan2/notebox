@@ -441,6 +441,25 @@ export default function App() {
     };
   }, [items, signedUrls]);
 
+  // YouTube titles for the detail modal, keyed by video id. null = lookup failed.
+  const [youtubeTitles, setYoutubeTitles] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    if (!selectedDetailItem || selectedDetailItem.type !== 'link') return;
+    const videoId = getYoutubeVideoId(selectedDetailItem.content);
+    if (!videoId || videoId in youtubeTitles) return;
+
+    // Server-side so videos with embedding disabled (oEmbed 401) still resolve.
+    fetch(`/api/youtube-title?id=${videoId}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((data: { title?: string | null }) => {
+        setYoutubeTitles((prev) => ({ ...prev, [videoId]: data.title?.trim() || null }));
+      })
+      .catch(() => {
+        setYoutubeTitles((prev) => ({ ...prev, [videoId]: null }));
+      });
+  }, [selectedDetailItem, youtubeTitles]);
+
   // Don't let a stale validation message greet the user next time they open it.
   useEffect(() => {
     if (!isCategoryModalOpen) {
@@ -2348,7 +2367,7 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] cursor-default"
+            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90dvh] cursor-default"
           >
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-shrink-0 bg-slate-900/90">
@@ -2703,7 +2722,7 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 cursor-default max-h-[90vh] flex flex-col"
+            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 cursor-default max-h-[90dvh] flex flex-col"
           >
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800 flex-shrink-0">
               <h3 className="font-semibold text-sm text-white flex items-center gap-2">
@@ -2882,7 +2901,7 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl max-h-[85vh] overflow-y-auto shadow-2xl p-6 cursor-default"
+            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl max-h-[85dvh] overflow-y-auto shadow-2xl p-6 cursor-default"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -2949,6 +2968,8 @@ export default function App() {
 
             {selectedDetailItem.type === 'link' && (() => {
               const ytThumb = getYoutubeThumbnail(selectedDetailItem.content);
+              const ytId = getYoutubeVideoId(selectedDetailItem.content);
+              const ytTitle = ytId ? youtubeTitles[ytId] : null;
               return (
                 <div className="space-y-3 mb-4">
                   {ytThumb && (
@@ -2979,6 +3000,16 @@ export default function App() {
                           </span>
                         </div>
                       </a>
+                    </div>
+                  )}
+
+                  {ytId && ytTitle !== null && (
+                    <div className="px-1">
+                      {ytTitle === undefined ? (
+                        <div className="h-5 sm:h-6 w-2/3 rounded bg-slate-800 animate-pulse" aria-label="YouTube 제목 불러오는 중" />
+                      ) : (
+                        <p className="text-base sm:text-lg font-semibold text-slate-100 leading-snug break-words">{ytTitle}</p>
+                      )}
                     </div>
                   )}
 
@@ -3078,7 +3109,7 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] cursor-default"
+            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90dvh] cursor-default"
           >
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-shrink-0 bg-slate-900/90">

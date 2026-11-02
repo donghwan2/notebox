@@ -4,17 +4,28 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import dotenv from 'dotenv';
 import { generateTags } from './lib/generateTags';
+import { fetchYoutubeTitle, isYoutubeVideoId } from './lib/youtubeTitle';
 
 dotenv.config();
 
 /**
- * Serves /api/generate-tags during `vite dev`, matching the Vercel function in
- * api/generate-tags.ts so both environments behave the same.
+ * Serves /api/generate-tags and /api/youtube-title during `vite dev`, matching
+ * the Vercel functions in api/ so both environments behave the same.
  */
 function geminiApiPlugin() {
   return {
     name: 'gemini-api-server',
     configureServer(server: any) {
+      server.middlewares.use('/api/youtube-title', async (req: any, res: any) => {
+        const id = new URL(req.url, 'http://localhost').searchParams.get('id');
+        res.setHeader('Content-Type', 'application/json');
+        if (!isYoutubeVideoId(id)) {
+          res.statusCode = 400;
+          return res.end(JSON.stringify({ error: 'invalid_video_id' }));
+        }
+        res.end(JSON.stringify({ title: await fetchYoutubeTitle(id) }));
+      });
+
       server.middlewares.use('/api/generate-tags', async (req: any, res: any) => {
         const send = (status: number, payload: unknown) => {
           res.statusCode = status;

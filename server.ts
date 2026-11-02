@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import { generateTags } from './lib/generateTags';
+import { fetchYoutubeTitle, isYoutubeVideoId } from './lib/youtubeTitle';
 
 dotenv.config();
 
@@ -25,6 +26,12 @@ app.post('/api/generate-tags', async (req, res) => {
     console.error('Gemini tag generation error:', err?.message ?? err);
     return res.json({ tags: [], error: 'tag_generation_failed' });
   }
+});
+
+app.get('/api/youtube-title', async (req, res) => {
+  const { id } = req.query;
+  if (!isYoutubeVideoId(id)) return res.status(400).json({ error: 'invalid_video_id' });
+  return res.json({ title: await fetchYoutubeTitle(id) });
 });
 
 // Serve static assets in production

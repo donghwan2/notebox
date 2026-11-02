@@ -140,7 +140,7 @@ export default function ProfileDashboard({ items, categories, onClose, onSignOut
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl cursor-default max-h-[90vh] flex flex-col"
+        className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl cursor-default max-h-[90dvh] flex flex-col"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-800 flex-shrink-0 bg-gradient-to-br from-indigo-950/40 to-purple-950/20">
