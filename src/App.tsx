@@ -105,70 +105,13 @@ export function detectContentType(content: string, imagePreview: string): Archiv
 
 export function NoteBoxLogo({ className = 'w-10 h-10' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <defs>
-        {/* Apple Style Smooth Diagonal Violet/Purple Gradients */}
-        <linearGradient id="gb-apple-leaf" x1="0.1" y1="0.8" x2="0.9" y2="0.2">
-          <stop offset="0%" stopColor="#A855F7" />
-          <stop offset="60%" stopColor="#C084FC" />
-          <stop offset="100%" stopColor="#E9D5FF" />
-        </linearGradient>
-
-        <linearGradient id="gb-apple-berry-1" x1="0.1" y1="0.1" x2="0.9" y2="0.9">
-          <stop offset="0%" stopColor="#E9D5FF" />
-          <stop offset="40%" stopColor="#C084FC" />
-          <stop offset="100%" stopColor="#8B5CF6" />
-        </linearGradient>
-
-        <linearGradient id="gb-apple-berry-2" x1="0.1" y1="0.1" x2="0.9" y2="0.9">
-          <stop offset="0%" stopColor="#DDD6FE" />
-          <stop offset="45%" stopColor="#A855F7" />
-          <stop offset="100%" stopColor="#7C3AED" />
-        </linearGradient>
-
-        <linearGradient id="gb-apple-berry-3" x1="0.1" y1="0.1" x2="0.9" y2="0.9">
-          <stop offset="0%" stopColor="#C4B5FD" />
-          <stop offset="50%" stopColor="#9333EA" />
-          <stop offset="100%" stopColor="#6D28D9" />
-        </linearGradient>
-
-        <linearGradient id="gb-apple-berry-bottom" x1="0.1" y1="0.1" x2="0.9" y2="0.9">
-          <stop offset="0%" stopColor="#A78BFA" />
-          <stop offset="60%" stopColor="#7C3AED" />
-          <stop offset="100%" stopColor="#581C87" />
-        </linearGradient>
-
-        {/* Soft Modern Glow */}
-        <filter id="gb-apple-glow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="2.5" stdDeviation="3" floodColor="#8B5CF6" floodOpacity="0.45" />
-        </filter>
-      </defs>
-
-      <g filter="url(#gb-apple-glow)">
-        {/* Leaf on Top Right (Apple icon tilted aesthetic) */}
-        <path
-          d="M48 24 C48 13, 59 4, 67 5 C67 15, 59 23, 48 24 Z"
-          fill="url(#gb-apple-leaf)"
-        />
-
-        {/* 8 Geometric Grape Circles scaled up nicely to fill the icon */}
-        {/* Row 1 (Top: 2 berries) */}
-        <circle cx="42" cy="33" r="8" fill="url(#gb-apple-berry-1)" />
-        <circle cx="59.5" cy="33" r="8" fill="url(#gb-apple-berry-1)" />
-
-        {/* Row 2 (Middle: 3 berries) */}
-        <circle cx="33.5" cy="47.5" r="8" fill="url(#gb-apple-berry-2)" />
-        <circle cx="50.75" cy="47.5" r="8" fill="url(#gb-apple-berry-2)" />
-        <circle cx="68" cy="47.5" r="8" fill="url(#gb-apple-berry-2)" />
-
-        {/* Row 3 (Lower: 2 berries) */}
-        <circle cx="42" cy="62" r="8" fill="url(#gb-apple-berry-3)" />
-        <circle cx="59.5" cy="62" r="8" fill="url(#gb-apple-berry-3)" />
-
-        {/* Row 4 (Bottom Point: 1 berry) */}
-        <circle cx="50.75" cy="75.5" r="7.5" fill="url(#gb-apple-berry-bottom)" />
-      </g>
-    </svg>
+    <img
+      src="/logo.png"
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      className={`object-contain select-none ${className}`}
+    />
   );
 }
 
@@ -370,8 +313,8 @@ export default function App() {
         link.rel = 'icon';
         document.head.appendChild(link);
       }
-      link.type = 'image/svg+xml';
-      link.href = '/favicon.svg';
+      link.type = 'image/x-icon';
+      link.href = '/favicon.ico';
     };
     setFavicon();
   }, []);
