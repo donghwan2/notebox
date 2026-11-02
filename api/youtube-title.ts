@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { fetchYoutubeTitle, isYoutubeVideoId } from '../lib/youtubeTitle';
+import { fetchYoutubeTitle, isYoutubeVideoId } from '../lib/youtubeTitle.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
