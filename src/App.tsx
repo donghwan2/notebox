@@ -3003,18 +3003,17 @@ export default function App() {
                     </div>
                   )}
 
-                  {ytId && ytTitle !== null && (
-                    <div className="px-1">
-                      {ytTitle === undefined ? (
-                        <div className="h-5 sm:h-6 w-2/3 rounded bg-slate-800 animate-pulse" aria-label="YouTube 제목 불러오는 중" />
-                      ) : (
-                        <p className="text-base sm:text-lg font-semibold text-slate-100 leading-snug break-words">{ytTitle}</p>
-                      )}
-                    </div>
-                  )}
-
                   <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
                     <p className="text-xs text-slate-400 mb-1">원문 링크</p>
+                    {ytId && ytTitle !== null && (
+                      <div className="mb-2">
+                        {ytTitle === undefined ? (
+                          <div className="h-5 sm:h-6 w-2/3 rounded bg-slate-800 animate-pulse" aria-label="YouTube 제목 불러오는 중" />
+                        ) : (
+                          <p className="text-base sm:text-lg font-semibold text-slate-100 leading-snug break-words">{ytTitle}</p>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between gap-2">
                       <a
                         href={selectedDetailItem.content}
