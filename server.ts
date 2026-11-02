@@ -31,7 +31,7 @@ app.post('/api/generate-tags', async (req, res) => {
 app.get('/api/youtube-title', async (req, res) => {
   const { id } = req.query;
   if (!isYoutubeVideoId(id)) return res.status(400).json({ error: 'invalid_video_id' });
-  return res.json({ title: await fetchYoutubeTitle(id) });
+  return res.json({ title: await fetchYoutubeTitle(id, process.env.YOUTUBE_API_KEY) });
 });
 
 // Serve static assets in production

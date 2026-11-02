@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query;
   if (!isYoutubeVideoId(id)) return res.status(400).json({ error: 'invalid_video_id' });
 
-  const title = await fetchYoutubeTitle(id);
+  const title = await fetchYoutubeTitle(id, process.env.YOUTUBE_API_KEY);
   // Titles rarely change; let the CDN absorb repeat lookups.
   if (title) res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
   return res.status(200).json({ title });

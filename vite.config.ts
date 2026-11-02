@@ -23,7 +23,7 @@ function geminiApiPlugin() {
           res.statusCode = 400;
           return res.end(JSON.stringify({ error: 'invalid_video_id' }));
         }
-        res.end(JSON.stringify({ title: await fetchYoutubeTitle(id) }));
+        res.end(JSON.stringify({ title: await fetchYoutubeTitle(id, process.env.YOUTUBE_API_KEY) }));
       });
 
       server.middlewares.use('/api/generate-tags', async (req: any, res: any) => {
