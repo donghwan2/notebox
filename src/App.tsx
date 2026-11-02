@@ -301,6 +301,11 @@ export default function App() {
   const [newCatIcon, setNewCatIcon] = useState('📁');
   const [catError, setCatError] = useState<string | null>(null);
 
+  // Inline rename inside the category manager
+  const [renamingCatId, setRenamingCatId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameError, setRenameError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -431,7 +436,11 @@ export default function App() {
 
   // Don't let a stale validation message greet the user next time they open it.
   useEffect(() => {
-    if (!isCategoryModalOpen) setCatError(null);
+    if (!isCategoryModalOpen) {
+      setCatError(null);
+      setRenamingCatId(null);
+      setRenameError(null);
+    }
   }, [isCategoryModalOpen]);
 
   // Handle ESC key to close any open modal
@@ -930,6 +939,46 @@ export default function App() {
         return;
       }
       setCatError(`카테고리 생성에 실패했습니다: ${err?.message ?? err}`);
+    }
+  };
+
+  const startRenameCategory = (cat: Category) => {
+    if (!requireAuth()) return;
+    setRenamingCatId(cat.id);
+    setRenameValue(cat.name);
+    setRenameError(null);
+  };
+
+  const cancelRenameCategory = () => {
+    setRenamingCatId(null);
+    setRenameError(null);
+  };
+
+  const handleRenameCategory = async (catId: string) => {
+    const name = renameValue.trim();
+    const current = categories.find((c) => c.id === catId);
+    if (!current) return cancelRenameCategory();
+    if (!name) {
+      setRenameError('카테고리 이름을 입력해 주세요.');
+      return;
+    }
+    if (name === current.name) return cancelRenameCategory();
+
+    if (categories.some((c) => c.id !== catId && c.name.trim().toLowerCase() === name.toLowerCase())) {
+      setRenameError('이미 존재하는 카테고리 입니다.');
+      return;
+    }
+
+    try {
+      const updated = await api.updateCategory(catId, { name });
+      setCategories((prev) => prev.map((c) => (c.id === catId ? updated : c)));
+      cancelRenameCategory();
+    } catch (err: any) {
+      if (err?.code === '23505') {
+        setRenameError('이미 존재하는 카테고리 입니다.');
+        return;
+      }
+      setRenameError(`이름 변경에 실패했습니다: ${err?.message ?? err}`);
     }
   };
 
@@ -1549,7 +1598,7 @@ export default function App() {
                 className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 hover:underline cursor-pointer"
               >
                 <FolderPlus className="w-3.5 h-3.5" />
-                <span>새 카테고리</span>
+                <span>새 카테고리 추가/관리</span>
               </button>
             </div>
 
@@ -2273,7 +2322,7 @@ export default function App() {
                     className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <FolderPlus className="w-3.5 h-3.5" />
-                    <span>새 카테고리 추가</span>
+                    <span>새 카테고리 추가/관리</span>
                   </button>
                 </div>
 
@@ -2659,11 +2708,68 @@ export default function App() {
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                     등록된 카테고리 목록 ({categories.length})
                   </p>
-                  <span className="text-[10px] text-slate-500">휴지통 클릭 시 즉시 삭제</span>
+                  <span className="text-[10px] text-slate-500">연필로 이름 변경 · 휴지통으로 삭제</span>
                 </div>
                 <div className="space-y-1.5 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
                   {categories.map((cat) => {
                     const count = items.filter((i) => i.category === cat.id).length;
+                    if (renamingCatId === cat.id) {
+                      return (
+                        <form
+                          key={cat.id}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleRenameCategory(cat.id);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-slate-950 border border-indigo-500/60 space-y-1.5"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={renameValue}
+                              onChange={(e) => {
+                                setRenameValue(e.target.value);
+                                if (renameError) setRenameError(null);
+                              }}
+                              onKeyDown={(e) => {
+                                // Esc cancels the rename only, not the whole modal.
+                                if (e.key === 'Escape') {
+                                  e.stopPropagation();
+                                  cancelRenameCategory();
+                                }
+                              }}
+                              aria-label={`"${cat.name}" 새 이름`}
+                              aria-invalid={renameError ? true : undefined}
+                              className="flex-1 min-w-0 bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none"
+                            />
+                            <button
+                              type="submit"
+                              className="p-1.5 hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 rounded-lg transition-colors cursor-pointer"
+                              title="이름 저장"
+                              aria-label="이름 저장"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelRenameCategory}
+                              className="p-1.5 hover:bg-slate-800 text-slate-500 hover:text-slate-300 rounded-lg transition-colors cursor-pointer"
+                              title="취소"
+                              aria-label="취소"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {renameError && (
+                            <p role="alert" className="flex items-center gap-1.5 text-[11px] text-rose-300">
+                              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                              {renameError}
+                            </p>
+                          )}
+                        </form>
+                      );
+                    }
                     return (
                       <div
                         key={cat.id}
@@ -2673,14 +2779,25 @@ export default function App() {
                           <span className="text-xs text-slate-200 font-medium truncate">{cat.name}</span>
                           <span className="text-[10px] text-slate-500">({count}개 항목)</span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteCategory(cat.id, e)}
-                          className="p-1.5 hover:bg-slate-800 text-slate-500 hover:text-slate-300 rounded-lg transition-colors cursor-pointer"
-                          title={`"${cat.name}" 카테고리 삭제`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => startRenameCategory(cat)}
+                            className="p-1.5 hover:bg-slate-800 text-slate-500 hover:text-slate-300 rounded-lg transition-colors cursor-pointer"
+                            title={`"${cat.name}" 이름 변경`}
+                            aria-label={`"${cat.name}" 이름 변경`}
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteCategory(cat.id, e)}
+                            className="p-1.5 hover:bg-slate-800 text-slate-500 hover:text-slate-300 rounded-lg transition-colors cursor-pointer"
+                            title={`"${cat.name}" 카테고리 삭제`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -2938,7 +3055,7 @@ export default function App() {
                     className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <FolderPlus className="w-3.5 h-3.5" />
-                    <span>새 카테고리 추가</span>
+                    <span>새 카테고리 추가/관리</span>
                   </button>
                 </div>
 
